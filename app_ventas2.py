@@ -192,14 +192,19 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
 with tab1:
     st.title("📊 Resumen Comercial")
     
-    # Métricas RFM
-    now = datetime.now()
-    rfm = df_filtrado.groupby('Order Lines/Customer/Company Name').agg({
-        'Order Lines/Created on': lambda x: (now - x.max()).days,
-        'Order Lines/Invoice Lines/Number': 'nunique',
-        'Order Lines/Untaxed Invoiced Amount': 'sum'
-    }).reset_index()
-    rfm.columns = ['Cliente', 'Recencia', 'Frecuencia', 'ValorMonetario']
+    # Calculate RFM safely
+    rfm = calculate_rfm(df_filtrado)
+    
+    if rfm is None:
+        st.warning("No se pudieron calcular las métricas RFM. Mostrando datos de ejemplo.")
+        # Create sample RFM data
+        rfm = pd.DataFrame({
+            'Company Name': ['Cliente Ejemplo'],
+            'Recencia': [30],
+            'Frecuencia': [1],
+            'ValorMonetario': [1000],
+            'TicketPromedio': [1000]
+        })
     
     # Calcular métricas
     clientes_unicos = df_filtrado['Order Lines/Customer/Company Name'].nunique()
