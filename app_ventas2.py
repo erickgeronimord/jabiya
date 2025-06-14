@@ -131,16 +131,16 @@ def load_data():
         return pd.DataFrame()
 
 # ==================================================
-# FUNCIÓN PARA CÁLCULO RFM MEJORADA
+# FUNCIÓN CALCULAR RFM CORREGIDA
 # ==================================================
 
 def calculate_rfm(df_input):
-    """Calcula métricas RFM con validación robusta"""
+    """Calcula métricas RFM con manejo robusto de errores y nombres de columnas consistentes"""
     try:
         # Verificar DataFrame vacío
         if df_input.empty:
             st.warning("DataFrame vacío recibido para cálculo RFM")
-            return pd.DataFrame()
+            return None
 
         # Verificar columnas requeridas
         required_cols = [
@@ -153,7 +153,7 @@ def calculate_rfm(df_input):
         missing_cols = [col for col in required_cols if col not in df_input.columns]
         if missing_cols:
             st.error(f"Columnas faltantes para RFM: {', '.join(missing_cols)}")
-            return pd.DataFrame()
+            return None
 
         # Asegurar formato de fecha
         if not pd.api.types.is_datetime64_any_dtype(df_input['Order Lines/Created on']):
@@ -163,38 +163,33 @@ def calculate_rfm(df_input):
                 utc=True
             )
             df_input = df_input.dropna(subset=['Order Lines/Created on'])
+            if df_input.empty:
+                st.warning("No hay fechas válidas después de la limpieza")
+                return None
 
-        # Calcular RFM
+        # Calcular RFM con nombres de columnas explícitos
         now = pd.Timestamp.now(tz='UTC')
         
-        rfm = df_input.groupby('Order Lines/Customer/Company Name').agg({
-            'Order Lines/Created on': [
-                ('Recencia', lambda x: (now - x.max()).days if not x.empty else pd.NA),
-                ('PrimeraCompra', 'min')
-            ],
-            'Order Lines/Invoice Lines/Number': [
-                ('Frecuencia', 'nunique'),
-                ('Transacciones', 'count')
-            ],
-            'Order Lines/Untaxed Invoiced Amount': [
-                ('ValorMonetario', 'sum'),
-                ('TicketPromedio', 'mean')
-            ]
-        }).reset_index()
-
-        # Limpiar nombres de columnas
-        rfm.columns = ['_'.join(col).strip() if col[1] else col[0] for col in rfm.columns.values]
-        rfm.columns = [col.replace('Order Lines_', '').replace('Customer_', '') for col in rfm.columns]
-
+        rfm = df_input.groupby('Order Lines/Customer/Company Name').agg(
+            Recencia=('Order Lines/Created on', lambda x: (now - x.max()).days),
+            Frecuencia=('Order Lines/Invoice Lines/Number', 'nunique'),
+            ValorMonetario=('Order Lines/Untaxed Invoiced Amount', 'sum'),
+            TicketPromedio=('Order Lines/Untaxed Invoiced Amount', 'mean')
+        ).reset_index()
+        
+        # Renombrar columna de cliente para consistencia
+        rfm = rfm.rename(columns={'Order Lines/Customer/Company Name': 'Cliente'})
+        
         # Manejar valores nulos
-        rfm['Recencia'] = rfm['Recencia'].fillna(365)
+        rfm['Recencia'] = rfm['Recencia'].fillna(365)  # 1 año como valor por defecto
         rfm['ValorMonetario'] = rfm['ValorMonetario'].fillna(0)
+        rfm['TicketPromedio'] = rfm['TicketPromedio'].fillna(0)
         
         return rfm
     
     except Exception as e:
         st.error(f"Error inesperado en cálculo RFM: {str(e)}")
-        return pd.DataFrame()
+        return None
 
 # ==================================================
 # CARGA DE DATOS Y FILTROS
@@ -270,31 +265,33 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "🌍 Georeferenciación"
 ])
 
-# -----------------------------------------
-# PESTAÑA 1: RESUMEN GENERAL
-# -----------------------------------------
+# ==================================================
+# USO CORREGIDO EN PESTAÑA 1
+# ==================================================
+
 with tab1:
     st.title("📊 Resumen Comercial")
     
     # Calcular RFM de forma segura
-    rfm = calculate_rfm(df_filtrado)
+    rfm_data = calculate_rfm(df_filtrado)
     
-    if rfm is None or rfm.empty:
-        st.warning("No se pudieron calcular métricas RFM. Mostrando datos de ejemplo.")
-        rfm = pd.DataFrame({
-            'Company_Name': ['Cliente Ejemplo 1', 'Cliente Ejemplo 2'],
+    # Manejar caso cuando el cálculo falla
+    if rfm_data is None or rfm_data.empty:
+        st.warning("No se pudieron calcular las métricas RFM. Mostrando datos de ejemplo.")
+        rfm_data = pd.DataFrame({
+            'Cliente': ['Cliente Ejemplo 1', 'Cliente Ejemplo 2'],
             'Recencia': [30, 180],
             'Frecuencia': [5, 2],
             'ValorMonetario': [5000, 2000],
             'TicketPromedio': [1000, 1000]
         })
     
-    # Calcular KPIs
-    clientes_unicos = len(rfm)
-    tasa_repeticion = len(rfm[rfm['Frecuencia'] > 1]) / clientes_unicos if clientes_unicos > 0 else 0
-    valor_vida_cliente = rfm['ValorMonetario'].mean()
-    ticket_promedio = rfm['TicketPromedio'].mean()
-    total_ventas = rfm['ValorMonetario'].sum()
+    # Calcular KPIs con nombres de columnas consistentes
+    clientes_unicos = len(rfm_data)
+    tasa_repeticion = len(rfm_data[rfm_data['Frecuencia'] > 1]) / clientes_unicos if clientes_unicos > 0 else 0
+    valor_vida_cliente = rfm_data['ValorMonetario'].mean()
+    ticket_promedio = rfm_data['TicketPromedio'].mean()
+    total_ventas = rfm_data['ValorMonetario'].sum()
     
     # Mostrar KPIs
     col1, col2, col3, col4 = st.columns(4)
