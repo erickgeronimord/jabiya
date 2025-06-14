@@ -38,16 +38,22 @@ st.markdown("""
 @st.cache_data(ttl=3600)
 def load_data():
     try:
+        # Configuración segura de locale para evitar errores
+        import locale
+        locale.setlocale(locale.LC_ALL, 'en_US.UTF-8')  # o 'C.UTF-8' como alternativa
+        
         file_id = "1i53R94PaYc9GmEhM1zAdP0Wx0OlVJSFZ"
         download_url = f"https://drive.google.com/uc?export=download&id={file_id}"
         response = requests.get(download_url)
         response.raise_for_status()
         df = pd.read_excel(BytesIO(response.content), sheet_name="Hoja2")
         
-        # Limpieza y transformación
+        # Limpieza y transformación (mantén tu código actual aquí)
         df.columns = df.columns.str.strip()
         df['Order Lines/Untaxed Invoiced Amount'] = df['Order Lines/Untaxed Invoiced Amount'].astype(str).str.replace('[^\d.]', '', regex=True).astype(float)
-        df['Order Lines/Created on'] = pd.to_datetime(df['Order Lines/Created on'], errors='coerce')
+        
+        # Configuración segura para fechas
+        df['Order Lines/Created on'] = pd.to_datetime(df['Order Lines/Created on'], errors='coerce', utc=True)
         df = df.dropna(subset=['Order Lines/Created on'])
         
         # Campos adicionales
