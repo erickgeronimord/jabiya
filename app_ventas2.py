@@ -266,74 +266,152 @@ with tab1:
         st.plotly_chart(fig_prod_uni, use_container_width=True)
 
 # -----------------------------------------
-# PESTAÑA 2: COMPORTAMIENTO CLIENTES
+# PESTAÑA 2: COMPORTAMIENTO CLIENTES (MEJORADA)
 # -----------------------------------------
 with tab2:
     st.title("👥 Análisis de Comportamiento de Clientes")
     
-    # Segmentación RFM
-    st.header("🔍 Segmentación RFM")
-    rfm['R_Score'] = pd.qcut(rfm['Recencia'], 5, labels=[5,4,3,2,1])
-    rfm['F_Score'] = pd.qcut(rfm['Frecuencia'].rank(method='first'), 5, labels=[1,2,3,4,5])
-    rfm['M_Score'] = pd.qcut(rfm['ValorMonetario'], 5, labels=[1,2,3,4,5])
-    rfm['RFM_Score'] = rfm['R_Score'].astype(str) + rfm['F_Score'].astype(str) + rfm['M_Score'].astype(str)
-    
-    fig_rfm = px.scatter(
-        rfm,
-        x='Frecuencia',
-        y='Recencia',
-        size='ValorMonetario',
-        color='RFM_Score',
-        hover_name='Cliente',
-        log_x=True,
-        title='Segmentación RFM de Clientes'
-    )
-    st.plotly_chart(fig_rfm, use_container_width=True)
-    
-with tab2:
-    st.header("📅 Retención por Cohortes")
-    
-    # Convertir a string en lugar de Period
-    df_filtrado['Cohorte'] = df_filtrado.groupby('Order Lines/Customer/Company Name')['Order Lines/Created on'].transform('min').dt.strftime('%Y-%m')
-    cohortes = df_filtrado.groupby(['Cohorte', 'Mes-Año']).agg({
-        'Order Lines/Customer/Company Name': 'nunique',
-        'Order Lines/Untaxed Invoiced Amount': 'sum'
-    }).reset_index()
-    
-    # Calcular meses desde cohorte como entero
-    cohortes['MesesDesdeCohorte'] = (pd.to_datetime(cohortes['Mes-Año']) - pd.to_datetime(cohortes['Cohorte'])).dt.days // 30
-    
-    # Crear matriz de retención
-    retention_pivot = cohortes.pivot_table(
-        index='Cohorte',
-        columns='MesesDesdeCohorte',
-        values='Order Lines/Customer/Company Name',
-        aggfunc='sum'
-    ).fillna(0)
-    
-    # Convertir índices a string
-    retention_pivot.index = retention_pivot.index.astype(str)
-    retention_pivot.columns = retention_pivot.columns.astype(str)
-    
-    fig_cohort = px.imshow(
-        retention_pivot,
-        labels=dict(x="Meses desde Cohorte", y="Cohorte", color="Clientes"),
-        title='Retención de Clientes por Cohorte',
-        color_continuous_scale='Blues'
-    )
-    st.plotly_chart(fig_cohort, use_container_width=True)
-    
-    # Top Clientes
-    st.header("🏆 Clientes más Valiosos")
-    fig_clientes = px.bar(
-        rfm.sort_values('ValorMonetario', ascending=False).head(10),
-        x='Cliente',
-        y='ValorMonetario',
-        color='Frecuencia',
-        title='Top 10 Clientes por Valor Total'
-    )
-    st.plotly_chart(fig_clientes, use_container_width=True)
+    # Función mejorada para calcular RFM
+    def calculate_safe_rfm(dataframe):
+        """Cálculo RFM con manejo robusto de errores"""
+        try:
+            # Verificar columnas necesarias
+            required_cols = ['Order Lines/Customer/Company Name', 
+                           'Order Lines/Created on',
+                           'Order Lines/Invoice Lines/Number',
+                           'Order Lines/Untaxed Invoiced Amount']
+            
+            if not all(col in dataframe.columns for col in required_cols):
+                missing = [col for col in required_cols if col not in dataframe.columns]
+                st.error(f"Columnas faltantes: {', '.join(missing)}")
+                return None
 
+            # Calcular RFM con validación
+            now = pd.Timestamp.now(tz='UTC')
+            dataframe['Order Lines/Created on'] = pd.to_datetime(dataframe['Order Lines/Created on'], utc=True)
+            
+            rfm = dataframe.groupby('Order Lines/Customer/Company Name').agg({
+                'Order Lines/Created on': lambda x: (now - x.max()).days if not x.empty else 365,
+                'Order Lines/Invoice Lines/Number': 'nunique',
+                'Order Lines/Untaxed Invoiced Amount': 'sum'
+            }).reset_index()
+            
+            rfm.columns = ['Cliente', 'Recencia', 'Frecuencia', 'ValorMonetario']
+            return rfm
+            
+        except Exception as e:
+            st.error(f"Error calculando RFM: {str(e)}")
+            return None
+
+    # Calcular RFM de forma segura
+    rfm_data = calculate_safe_rfm(df_filtrado)
+    
+    if rfm_data is None:
+        st.warning("No se pudo calcular el análisis RFM. Mostrando datos de ejemplo.")
+        # Datos de ejemplo
+        rfm_data = pd.DataFrame({
+            'Cliente': ['Cliente Ejemplo 1', 'Cliente Ejemplo 2'],
+            'Recencia': [30, 180],
+            'Frecuencia': [5, 2],
+            'ValorMonetario': [5000, 2000]
+        })
+    
+    # Segmentación RFM mejorada
+    st.header("🔍 Segmentación RFM")
+    try:
+        # Crear segmentos con manejo de bordes
+        rfm_data['R_Score'] = pd.qcut(rfm_data['Recencia'], 5, labels=[5,4,3,2,1], duplicates='drop')
+        rfm_data['F_Score'] = pd.qcut(rfm_data['Frecuencia'].rank(method='first'), 5, labels=[1,2,3,4,5], duplicates='drop')
+        rfm_data['M_Score'] = pd.qcut(rfm_data['ValorMonetario'], 5, labels=[1,2,3,4,5], duplicates='drop')
+        rfm_data['RFM_Score'] = rfm_data['R_Score'].astype(str) + rfm_data['F_Score'].astype(str) + rfm_data['M_Score'].astype(str)
+        
+        # Gráfico interactivo
+        fig_rfm = px.scatter(
+            rfm_data,
+            x='Frecuencia',
+            y='Recencia',
+            size='ValorMonetario',
+            color='RFM_Score',
+            hover_name='Cliente',
+            log_x=True,
+            title='Segmentación RFM de Clientes',
+            height=600
+        )
+        st.plotly_chart(fig_rfm, use_container_width=True)
+        
+    except Exception as e:
+        st.error(f"Error en segmentación RFM: {str(e)}")
+        st.warning("Mostrando análisis simplificado")
+        fig_rfm = px.scatter(
+            rfm_data,
+            x='Frecuencia',
+            y='Recencia',
+            size='ValorMonetario',
+            hover_name='Cliente',
+            title='Distribución Básica de Clientes'
+        )
+        st.plotly_chart(fig_rfm, use_container_width=True)
+    
+    # Análisis de Cohortes mejorado
+    st.header("📅 Retención por Cohortes")
+    try:
+        # Crear cohortes con manejo de fechas seguro
+        df_filtrado['Cohorte'] = df_filtrado.groupby('Order Lines/Customer/Company Name')['Order Lines/Created on'].transform('min').dt.strftime('%Y-%m')
+        
+        # Calcular meses desde cohorte como enteros
+        cohortes = df_filtrado.groupby(['Cohorte', 'Mes-Año']).agg({
+            'Order Lines/Customer/Company Name': 'nunique',
+            'Order Lines/Untaxed Invoiced Amount': 'sum'
+        }).reset_index()
+        
+        cohortes['MesesDesdeCohorte'] = (
+            (pd.to_datetime(cohortes['Mes-Año']) - pd.to_datetime(cohortes['Cohorte']))
+            .dt.days // 30
+        )
+        
+        # Matriz de retención con pivot_table seguro
+        retention_pivot = cohortes.pivot_table(
+            index='Cohorte',
+            columns='MesesDesdeCohorte',
+            values='Order Lines/Customer/Company Name',
+            aggfunc='sum',
+            fill_value=0
+        )
+        
+        # Gráfico de calor interactivo
+        fig_cohort = px.imshow(
+            retention_pivot,
+            labels=dict(x="Meses desde Cohorte", y="Cohorte", color="Clientes"),
+            title='Retención de Clientes por Cohorte',
+            color_continuous_scale='Blues',
+            aspect='auto'
+        )
+        st.plotly_chart(fig_cohort, use_container_width=True)
+        
+    except Exception as e:
+        st.error(f"Error en análisis de cohortes: {str(e)}")
+        st.warning("No se pudo generar el análisis de cohortes")
+    
+    # Top Clientes con validación
+    st.header("🏆 Clientes más Valiosos")
+    try:
+        if not rfm_data.empty:
+            top_clientes = rfm_data.sort_values('ValorMonetario', ascending=False).head(10)
+            fig_clientes = px.bar(
+                top_clientes,
+                x='Cliente',
+                y='ValorMonetario',
+                color='Frecuencia',
+                title='Top 10 Clientes por Valor Total',
+                hover_data=['Recencia'],
+                height=500
+            )
+            st.plotly_chart(fig_clientes, use_container_width=True)
+        else:
+            st.warning("No hay datos suficientes para mostrar clientes destacados")
+    except Exception as e:
+        st.error(f"Error generando gráfico de clientes: {str(e)}")
+        
 # -----------------------------------------
 # PESTAÑA 3: ANÁLISIS DE PRODUCTOS
 # -----------------------------------------
