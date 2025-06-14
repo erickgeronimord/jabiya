@@ -263,7 +263,16 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
 # PESTAÑA 1: RESUMEN GENERAL
 # -----------------------------------------
 with tab1:
-    st.title("📊 Resumen Comercial")
+    st.title("📊 Resumen Comercial
+    Análisis de métricas clave y tendencias
+Este tablero muestra un panorama completo del desempeño comercial, incluyendo:
+
+Total de ventas y clientes únicos
+
+Evolución mensual de ingresos
+
+Productos más vendidos por volumen y valor
+Los datos te ayudarán a identificar patrones generales y puntos destacados del período seleccionado.")
     
     # Calcular RFM de forma segura
     rfm = calcular_rfm(df_filtrado)
