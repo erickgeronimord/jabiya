@@ -8,8 +8,35 @@ from io import BytesIO
 from mlxtend.frequent_patterns import apriori, association_rules
 import networkx as nx
 import matplotlib.pyplot as plt
+import locale
+import os
 
-# Configuración de la página
+# --------------------------------------------------
+# CONFIGURACIÓN INICIAL DE LOCALE (SOLUCIÓN AL ERROR)
+# --------------------------------------------------
+def configure_locale():
+    """Configura el locale para evitar errores en Streamlit Cloud"""
+    try:
+        locale.setlocale(locale.LC_ALL, 'en_US.UTF-8')
+    except locale.Error:
+        try:
+            locale.setlocale(locale.LC_ALL, 'C.UTF-8')
+        except locale.Error:
+            # Configuración de respaldo
+            os.environ['LC_ALL'] = 'C.UTF-8'
+            os.environ['LANG'] = 'C.UTF-8'
+            os.environ['LANGUAGE'] = 'C.UTF-8'
+            try:
+                locale.setlocale(locale.LC_ALL, 'C.UTF-8')
+            except:
+                st.warning("No se pudo configurar el locale correctamente. Algunas funciones pueden no trabajar óptimamente.")
+
+# Ejecutar la configuración al inicio
+configure_locale()
+
+# --------------------------------------------------
+# CONFIGURACIÓN DE LA PÁGINA
+# --------------------------------------------------
 st.set_page_config(
     layout="wide",
     page_title="Dashboard Comercial Integral",
@@ -34,45 +61,84 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- Carga de datos ---
+# --------------------------------------------------
+# FUNCIÓN DE CARGA DE DATOS MEJORADA
+# --------------------------------------------------
 @st.cache_data(ttl=3600)
 def load_data():
+    """Carga y procesa los datos con manejo robusto de locale"""
     try:
-        # Configuración segura de locale para evitar errores
-        import locale
-        locale.setlocale(locale.LC_ALL, 'en_US.UTF-8')  # o 'C.UTF-8' como alternativa
+        # Configuración adicional de locale para esta función
+        configure_locale()
         
+        # Descarga del archivo
         file_id = "1i53R94PaYc9GmEhM1zAdP0Wx0OlVJSFZ"
         download_url = f"https://drive.google.com/uc?export=download&id={file_id}"
         response = requests.get(download_url)
         response.raise_for_status()
+        
+        # Carga del Excel
         df = pd.read_excel(BytesIO(response.content), sheet_name="Hoja2")
         
-        # Limpieza y transformación (mantén tu código actual aquí)
+        # Limpieza y transformación
         df.columns = df.columns.str.strip()
-        df['Order Lines/Untaxed Invoiced Amount'] = df['Order Lines/Untaxed Invoiced Amount'].astype(str).str.replace('[^\d.]', '', regex=True).astype(float)
         
-        # Configuración segura para fechas
-        df['Order Lines/Created on'] = pd.to_datetime(df['Order Lines/Created on'], errors='coerce', utc=True)
+        # Conversión de montos - método robusto
+        df['Order Lines/Untaxed Invoiced Amount'] = (
+            df['Order Lines/Untaxed Invoiced Amount']
+            .astype(str)
+            .str.replace('[^\d.]', '', regex=True)
+            .astype(float)
+        )
+        
+        # Manejo de fechas independiente de locale
+        df['Order Lines/Created on'] = pd.to_datetime(
+            df['Order Lines/Created on'], 
+            errors='coerce',
+            utc=True  # Usar UTC para mayor compatibilidad
+        )
         df = df.dropna(subset=['Order Lines/Created on'])
+        
+        # Mapeo de días de la semana sin dependencia de locale
+        dias_semana = {
+            0: "Lunes",
+            1: "Martes",
+            2: "Miércoles",
+            3: "Jueves",
+            4: "Viernes",
+            5: "Sábado",
+            6: "Domingo"
+        }
         
         # Campos adicionales
         df['Año'] = df['Order Lines/Created on'].dt.year
         df['Mes'] = df['Order Lines/Created on'].dt.month
         df['Mes-Año'] = df['Order Lines/Created on'].dt.strftime('%Y-%m')
-        df['DíaSemana'] = df['Order Lines/Created on'].dt.day_name(locale='es')
+        df['DíaSemana'] = df['Order Lines/Created on'].dt.weekday.map(dias_semana)
         df['Hora'] = df['Order Lines/Created on'].dt.hour
         df['Trimestre'] = df['Order Lines/Created on'].dt.quarter
         
         return df
+    
+    except requests.exceptions.RequestException as e:
+        st.error(f"Error al descargar el archivo: {str(e)}")
+        return pd.DataFrame()
     except Exception as e:
-        st.error(f"Error al cargar datos: {str(e)}")
+        st.error(f"Error al procesar los datos: {str(e)}")
         return pd.DataFrame()
 
+# --------------------------------------------------
+# CARGA Y VERIFICACIÓN DE DATOS
+# --------------------------------------------------
 df = load_data()
 
 if df.empty:
-    st.warning("No se pudieron cargar los datos. Verifica el archivo fuente.")
+    st.warning("""
+        No se pudieron cargar los datos. Verifica:
+        1. Que el archivo esté disponible en Google Drive
+        2. Que tengas permisos para acceder al archivo
+        3. Que la estructura del archivo sea correcta
+    """)
     st.stop()
 
 # --- Sidebar con Filtros ---
