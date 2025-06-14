@@ -573,6 +573,7 @@ with tab5:
                     lon='lon',
                     size='Ventas',
                     color='Ventas',
+                    color_continuous_scale="reds",
                     hover_name='Cliente',
                     hover_data=['Ventas'],
                     zoom=11,
