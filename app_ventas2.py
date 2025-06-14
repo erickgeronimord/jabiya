@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
-from datetime import datetime
+from datetime import datetime, timedelta
 import pytz
 import requests
 from io import BytesIO
@@ -18,42 +18,39 @@ import os
 # ==================================================
 
 # Configuración de locale para evitar errores
-def configure_locale():
-    locale_options = ['en_US.UTF-8', 'C.UTF-8', 'en_US.utf8', 'en_US', 'C', 'POSIX']
-    for loc in locale_options:
+def configurar_locale():
+    try:
+        locale.setlocale(locale.LC_ALL, 'es_ES.UTF-8')
+    except locale.Error:
         try:
-            locale.setlocale(locale.LC_ALL, loc)
-            os.environ['LC_ALL'] = loc
-            os.environ['LANG'] = loc
-            os.environ['LANGUAGE'] = loc
-            break
-        except (locale.Error, Exception):
-            continue
+            locale.setlocale(locale.LC_ALL, 'en_US.UTF-8')
+        except locale.Error:
+            os.environ['LC_ALL'] = 'C.UTF-8'
+            os.environ['LANG'] = 'C.UTF-8'
 
-configure_locale()
+configurar_locale()
 
 # Configuración de la página
 st.set_page_config(
     layout="wide",
-    page_title="Dashboard Comercial Integral",
+    page_title="Validacion y Cruce con clientes jabiya SDQ",
     page_icon="📊",
     initial_sidebar_state="expanded"
 )
 
-# Estilos CSS
+# Estilos CSS personalizados
 st.markdown("""
 <style>
-    .metric-box {
-        padding: 15px;
-        border-radius: 10px;
-        background-color: #f0f2f6;
+    .header { font-size: 24px !important; font-weight: bold !important; }
+    .metric-box { 
+        padding: 15px; 
+        border-radius: 10px; 
+        background-color: #f8f9fa;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         margin-bottom: 15px;
     }
-    @media (max-width: 768px) {
-        .stMetric { padding: 5px !important; }
-        .stDataFrame { font-size: 12px !important; }
-        .stPlotlyChart { height: 300px !important; }
-    }
+    .stAlert { border-radius: 10px; }
+    .stPlotlyChart { border-radius: 10px; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -62,13 +59,10 @@ st.markdown("""
 # ==================================================
 
 @st.cache_data(ttl=3600)
-def load_data():
+def cargar_datos():
     """Carga y procesa los datos con manejo robusto de errores"""
     try:
-        # Configuración adicional de locale
-        configure_locale()
-        
-        # Descarga del archivo con timeout
+        # Intento de carga desde Google Drive
         file_id = "1i53R94PaYc9GmEhM1zAdP0Wx0OlVJSFZ"
         download_url = f"https://drive.google.com/uc?export=download&id={file_id}"
         response = requests.get(download_url, timeout=30)
@@ -127,15 +121,29 @@ def load_data():
         return df
     
     except Exception as e:
-        st.error(f"Error crítico al cargar datos: {str(e)}")
-        return pd.DataFrame()
+        st.error(f"Error al cargar datos principales: {str(e)}")
+        
+        # Datos de ejemplo como fallback
+        fecha_inicio = datetime(2023, 1, 1)
+        rango_fechas = [fecha_inicio + timedelta(days=i) for i in range(90)]
+        df = pd.DataFrame({
+            'Order Lines/Created on': rango_fechas,
+            'Order Lines/Customer/Company Name': np.random.choice(['Cliente A', 'Cliente B', 'Cliente C'], 90),
+            'Order Lines/Untaxed Invoiced Amount': np.random.uniform(100, 5000, 90),
+            'Order Lines/Product': np.random.choice(['Producto 1', 'Producto 2', 'Producto 3'], 90),
+            'Order Lines/Invoice Lines/Number': np.random.randint(1000, 9999, 90),
+            'Order Lines/Customer/Asesor (Gestor)': np.random.choice(['Asesor 1', 'Asesor 2', 'Asesor 3'], 90)
+        })
+        
+        st.warning("Se están utilizando datos de ejemplo. La funcionalidad será limitada.")
+        return df
 
 # ==================================================
-# FUNCIÓN CALCULAR RFM CORREGIDA
+# FUNCIÓN PARA CÁLCULO RFM MEJORADA
 # ==================================================
 
-def calculate_rfm(df_input):
-    """Calcula métricas RFM con manejo robusto de errores y nombres de columnas consistentes"""
+def calcular_rfm(df_input):
+    """Calcula métricas RFM con validación robusta"""
     try:
         # Verificar DataFrame vacío
         if df_input.empty:
@@ -167,7 +175,7 @@ def calculate_rfm(df_input):
                 st.warning("No hay fechas válidas después de la limpieza")
                 return None
 
-        # Calcular RFM con nombres de columnas explícitos
+        # Calcular RFM con nombres explícitos
         now = pd.Timestamp.now(tz='UTC')
         
         rfm = df_input.groupby('Order Lines/Customer/Company Name').agg(
@@ -175,15 +183,20 @@ def calculate_rfm(df_input):
             Frecuencia=('Order Lines/Invoice Lines/Number', 'nunique'),
             ValorMonetario=('Order Lines/Untaxed Invoiced Amount', 'sum'),
             TicketPromedio=('Order Lines/Untaxed Invoiced Amount', 'mean')
-        ).reset_index()
-        
-        # Renombrar columna de cliente para consistencia
-        rfm = rfm.rename(columns={'Order Lines/Customer/Company Name': 'Cliente'})
+        ).reset_index().rename(columns={'Order Lines/Customer/Company Name': 'Cliente'})
         
         # Manejar valores nulos
-        rfm['Recencia'] = rfm['Recencia'].fillna(365)  # 1 año como valor por defecto
-        rfm['ValorMonetario'] = rfm['ValorMonetario'].fillna(0)
-        rfm['TicketPromedio'] = rfm['TicketPromedio'].fillna(0)
+        rfm = rfm.fillna({
+            'Recencia': 365,
+            'ValorMonetario': 0,
+            'TicketPromedio': 0
+        })
+        
+        # Segmentación RFM
+        rfm['R_Score'] = pd.qcut(rfm['Recencia'], 5, labels=[5,4,3,2,1], duplicates='drop')
+        rfm['F_Score'] = pd.qcut(rfm['Frecuencia'].rank(method='first'), 5, labels=[1,2,3,4,5], duplicates='drop')
+        rfm['M_Score'] = pd.qcut(rfm['ValorMonetario'], 5, labels=[1,2,3,4,5], duplicates='drop')
+        rfm['RFM_Score'] = rfm['R_Score'].astype(str) + rfm['F_Score'].astype(str) + rfm['M_Score'].astype(str)
         
         return rfm
     
@@ -196,26 +209,7 @@ def calculate_rfm(df_input):
 # ==================================================
 
 # Cargar datos
-df = load_data()
-
-if df.empty:
-    st.warning("""
-    No se pudieron cargar los datos principales. Opciones:
-    1. Verificar conexión a Internet
-    2. Comprobar acceso al archivo
-    3. Subir archivo manualmente
-    """)
-    
-    uploaded_file = st.file_uploader("Subir archivo Excel", type=['xlsx'])
-    if uploaded_file:
-        try:
-            df = pd.read_excel(uploaded_file, sheet_name="Hoja2", engine='openpyxl')
-            st.success("Archivo cargado correctamente!")
-        except Exception as e:
-            st.error(f"Error al cargar archivo: {e}")
-            st.stop()
-    else:
-        st.stop()
+df = cargar_datos()
 
 # Filtros en sidebar
 with st.sidebar:
@@ -236,7 +230,7 @@ with st.sidebar:
         float(df['Order Lines/Untaxed Invoiced Amount'].min()),
         float(df['Order Lines/Untaxed Invoiced Amount'].max()),
         (float(df['Order Lines/Untaxed Invoiced Amount'].min()), 
-        float(df['Order Lines/Untaxed Invoiced Amount'].max()))
+         float(df['Order Lines/Untaxed Invoiced Amount'].max()))
     )
 
 # Aplicar filtros
@@ -254,7 +248,7 @@ df_filtrado = df_filtrado[
 ]
 
 # ==================================================
-# PESTAÑAS PRINCIPALES
+# PESTAÑAS PRINCIPALES (TODAS INCLUIDAS)
 # ==================================================
 
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
@@ -265,33 +259,35 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "🌍 Georeferenciación"
 ])
 
-# ==================================================
-# USO CORREGIDO EN PESTAÑA 1
-# ==================================================
-
+# -----------------------------------------
+# PESTAÑA 1: RESUMEN GENERAL
+# -----------------------------------------
 with tab1:
     st.title("📊 Resumen Comercial")
     
     # Calcular RFM de forma segura
-    rfm_data = calculate_rfm(df_filtrado)
+    rfm = calcular_rfm(df_filtrado)
     
-    # Manejar caso cuando el cálculo falla
-    if rfm_data is None or rfm_data.empty:
-        st.warning("No se pudieron calcular las métricas RFM. Mostrando datos de ejemplo.")
-        rfm_data = pd.DataFrame({
+    if rfm is None or rfm.empty:
+        st.warning("No se pudieron calcular métricas RFM. Mostrando datos de ejemplo.")
+        rfm = pd.DataFrame({
             'Cliente': ['Cliente Ejemplo 1', 'Cliente Ejemplo 2'],
             'Recencia': [30, 180],
             'Frecuencia': [5, 2],
             'ValorMonetario': [5000, 2000],
-            'TicketPromedio': [1000, 1000]
+            'TicketPromedio': [1000, 1000],
+            'R_Score': [5, 3],
+            'F_Score': [5, 2],
+            'M_Score': [5, 3],
+            'RFM_Score': ['555', '323']
         })
     
-    # Calcular KPIs con nombres de columnas consistentes
-    clientes_unicos = len(rfm_data)
-    tasa_repeticion = len(rfm_data[rfm_data['Frecuencia'] > 1]) / clientes_unicos if clientes_unicos > 0 else 0
-    valor_vida_cliente = rfm_data['ValorMonetario'].mean()
-    ticket_promedio = rfm_data['TicketPromedio'].mean()
-    total_ventas = rfm_data['ValorMonetario'].sum()
+    # Calcular KPIs
+    clientes_unicos = len(rfm)
+    tasa_repeticion = len(rfm[rfm['Frecuencia'] > 1]) / clientes_unicos if clientes_unicos > 0 else 0
+    valor_vida_cliente = rfm['ValorMonetario'].mean()
+    ticket_promedio = rfm['TicketPromedio'].mean()
+    total_ventas = rfm['ValorMonetario'].sum()
     
     # Mostrar KPIs
     col1, col2, col3, col4 = st.columns(4)
@@ -351,12 +347,258 @@ with tab1:
     except Exception as e:
         st.error(f"Error al generar gráficos de productos: {str(e)}")
 
-# [Resto de pestañas (tab2, tab3, tab4, tab5) permanecen igual...]
+# -----------------------------------------
+# PESTAÑA 2: COMPORTAMIENTO CLIENTES
+# -----------------------------------------
+with tab2:
+    st.title("👥 Análisis de Comportamiento de Clientes")
+    
+    # Mostrar segmentación RFM
+    if rfm is not None and not rfm.empty:
+        st.header("🔍 Segmentación RFM")
+        try:
+            fig_rfm = px.scatter(
+                rfm,
+                x='Frecuencia',
+                y='Recencia',
+                size='ValorMonetario',
+                color='RFM_Score',
+                hover_name='Cliente',
+                log_x=True,
+                title='Segmentación RFM de Clientes',
+                height=600
+            )
+            st.plotly_chart(fig_rfm, use_container_width=True)
+        except Exception as e:
+            st.error(f"Error al generar gráfico RFM: {str(e)}")
+    
+    # Análisis de Cohortes
+    st.header("📅 Retención por Cohortes")
+    try:
+        df_filtrado['Cohorte'] = df_filtrado.groupby('Order Lines/Customer/Company Name')['Order Lines/Created on'].transform('min').dt.strftime('%Y-%m')
+        cohortes = df_filtrado.groupby(['Cohorte', 'Mes-Año']).agg({
+            'Order Lines/Customer/Company Name': 'nunique',
+            'Order Lines/Untaxed Invoiced Amount': 'sum'
+        }).reset_index()
+        
+        cohortes['MesesDesdeCohorte'] = (pd.to_datetime(cohortes['Mes-Año']) - pd.to_datetime(cohortes['Cohorte'])).dt.days // 30
+        
+        retention_pivot = cohortes.pivot_table(
+            index='Cohorte',
+            columns='MesesDesdeCohorte',
+            values='Order Lines/Customer/Company Name',
+            aggfunc='sum',
+            fill_value=0
+        )
+        
+        fig_cohort = px.imshow(
+            retention_pivot,
+            labels=dict(x="Meses desde Cohorte", y="Cohorte", color="Clientes"),
+            title='Retención de Clientes por Cohorte',
+            color_continuous_scale='Blues',
+            aspect='auto'
+        )
+        st.plotly_chart(fig_cohort, use_container_width=True)
+    except Exception as e:
+        st.error(f"Error en análisis de cohortes: {str(e)}")
+    
+    # Top Clientes
+    st.header("🏆 Clientes más Valiosos")
+    try:
+        if rfm is not None and not rfm.empty:
+            fig_clientes = px.bar(
+                rfm.sort_values('ValorMonetario', ascending=False).head(10),
+                x='Cliente',
+                y='ValorMonetario',
+                color='Frecuencia',
+                title='Top 10 Clientes por Valor Total',
+                hover_data=['Recencia']
+            )
+            st.plotly_chart(fig_clientes, use_container_width=True)
+        else:
+            st.warning("No hay datos de clientes para mostrar")
+    except Exception as e:
+        st.error(f"Error al generar gráfico de clientes: {str(e)}")
 
-# Pie de página
+# -----------------------------------------
+# PESTAÑA 3: ANÁLISIS DE PRODUCTOS
+# -----------------------------------------
+with tab3:
+    st.title("📦 Análisis de Productos")
+    
+    # Asociación de Productos
+    st.header("🛒 Productos Comprados Juntos")
+    try:
+        transacciones = df_filtrado.groupby(['Order Lines/Invoice Lines/Number', 'Order Lines/Product'])['Order Lines/Product'].count().unstack().fillna(0)
+        transacciones = transacciones.applymap(lambda x: 1 if x > 0 else 0)
+        
+        reglas = apriori(transacciones, min_support=0.05, use_colnames=True, max_len=2)
+        reglas = association_rules(reglas, metric="lift", min_threshold=1)
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            st.subheader("Top 5 Reglas de Asociación")
+            st.dataframe(reglas.sort_values('lift', ascending=False).head(5))
+        
+        with col2:
+            st.subheader("Red de Relaciones")
+            fig_network = plt.figure(figsize=(10,8))
+            G = nx.Graph()
+            
+            for _, row in reglas.sort_values('lift', ascending=False).head(8).iterrows():
+                antecedentes = ', '.join(list(row['antecedents']))
+                consecuentes = ', '.join(list(row['consequents']))
+                G.add_edge(antecedentes, consecuentes, weight=row['lift'])
+            
+            pos = nx.spring_layout(G)
+            nx.draw(G, pos, with_labels=True, node_size=2500, node_color="skyblue", 
+                   font_size=10, width=[d['weight']*0.5 for (u,v,d) in G.edges(data=True)])
+            st.pyplot(fig_network)
+    except Exception as e:
+        st.warning(f"No se pudo generar el análisis de asociación: {str(e)}")
+    
+    # Distribución de Ventas por Producto
+    st.header("📊 Distribución de Ventas")
+    try:
+        fig_prod = px.treemap(
+            df_filtrado.groupby('Order Lines/Product')['Order Lines/Untaxed Invoiced Amount'].sum().reset_index(),
+            path=['Order Lines/Product'],
+            values='Order Lines/Untaxed Invoiced Amount',
+            title='Participación de cada Producto en Ventas Totales'
+        )
+        st.plotly_chart(fig_prod, use_container_width=True)
+    except Exception as e:
+        st.error(f"Error al generar gráfico de productos: {str(e)}")
+
+# -----------------------------------------
+# PESTAÑA 4: EVOLUCIÓN TEMPORAL
+# -----------------------------------------
+with tab4:
+    st.title("🔄 Evolución Temporal")
+    
+    # Selector de frecuencia
+    freq = st.radio(
+        "Frecuencia de análisis:",
+        ["Diario", "Semanal", "Mensual"],
+        horizontal=True
+    )
+    
+    try:
+        if freq == "Diario":
+            datos_temporales = df_filtrado.groupby(df_filtrado['Order Lines/Created on'].dt.date).agg({
+                'Order Lines/Untaxed Invoiced Amount': 'sum',
+                'Order Lines/Invoice Lines/Number': 'nunique'
+            }).reset_index()
+            x_col = 'Order Lines/Created on'
+        elif freq == "Semanal":
+            df_filtrado['Semana'] = df_filtrado['Order Lines/Created on'].dt.strftime('%Y-%U')
+            datos_temporales = df_filtrado.groupby('Semana').agg({
+                'Order Lines/Untaxed Invoiced Amount': 'sum',
+                'Order Lines/Invoice Lines/Number': 'nunique'
+            }).reset_index()
+            x_col = 'Semana'
+        else:  # Mensual
+            datos_temporales = df_filtrado.groupby('Mes-Año').agg({
+                'Order Lines/Untaxed Invoiced Amount': 'sum',
+                'Order Lines/Invoice Lines/Number': 'nunique'
+            }).reset_index()
+            x_col = 'Mes-Año'
+        
+        # Gráfico temporal
+        fig_temp = px.line(
+            datos_temporales,
+            x=x_col,
+            y='Order Lines/Untaxed Invoiced Amount',
+            title=f"Evolución de Ventas ({freq})",
+            markers=True
+        )
+        st.plotly_chart(fig_temp, use_container_width=True)
+    except Exception as e:
+        st.error(f"Error al generar análisis temporal: {str(e)}")
+    
+    # Patrones horarios
+    st.header("⏰ Patrones de Compra por Hora")
+    try:
+        patrones_hora = df_filtrado.groupby(['DíaSemana', 'Hora']).agg({
+            'Order Lines/Untaxed Invoiced Amount': 'sum'
+        }).reset_index()
+        
+        fig_hora = px.density_heatmap(
+            patrones_hora,
+            x='Hora',
+            y='DíaSemana',
+            z='Order Lines/Untaxed Invoiced Amount',
+            title='Intensidad de Compras por Día y Hora',
+            color_continuous_scale='Viridis',
+            category_orders={"DíaSemana": ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]}
+        )
+        st.plotly_chart(fig_hora, use_container_width=True)
+    except Exception as e:
+        st.error(f"Error al generar análisis horario: {str(e)}")
+
+# -----------------------------------------
+# PESTAÑA 5: GEOREFERENCIACIÓN
+# -----------------------------------------
+with tab5:
+    st.title("🌍 Análisis Geográfico")
+    
+    # Verificar si existen columnas de geolocalización
+    if all(col in df_filtrado.columns for col in ['Order Lines/Customer/Geo Latitude', 'Order Lines/Customer/Geo Longitude']):
+        # Mapa de calor geográfico
+        st.header("🗺️ Mapa de Calor de Clientes")
+        
+        try:
+            geo_data = df_filtrado[
+                ['Order Lines/Customer/Company Name', 
+                 'Order Lines/Customer/Geo Latitude', 
+                 'Order Lines/Customer/Geo Longitude',
+                 'Order Lines/Untaxed Invoiced Amount']
+            ].dropna()
+            
+            if not geo_data.empty:
+                geo_data = geo_data.rename(columns={
+                    'Order Lines/Customer/Geo Latitude': 'lat',
+                    'Order Lines/Customer/Geo Longitude': 'lon',
+                    'Order Lines/Customer/Company Name': 'Cliente',
+                    'Order Lines/Untaxed Invoiced Amount': 'Ventas'
+                })
+                
+                fig = px.density_mapbox(
+                    geo_data,
+                    lat='lat',
+                    lon='lon',
+                    z='Ventas',
+                    radius=10,
+                    center=dict(lat=geo_data['lat'].mean(), lon=geo_data['lon'].mean()),
+                    zoom=10,
+                    mapbox_style="stamen-terrain",
+                    title='Concentración Geográfica de Ventas'
+                )
+                st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.warning("No hay datos geográficos disponibles para los filtros seleccionados")
+        except Exception as e:
+            st.error(f"Error al generar mapa geográfico: {str(e)}")
+    else:
+        st.warning("No se encontraron datos de coordenadas geográficas en el dataset")
+
+# ==================================================
+# PIE DE PÁGINA Y OPCIONES ADICIONALES
+# ==================================================
+
 st.markdown("---")
 st.caption(f"Última actualización: {datetime.now().strftime('%d/%m/%Y %H:%M')} | Dashboard desarrollado con Streamlit")
 
-# Mostrar datos filtrados (opcional)
+# Opción para mostrar datos filtrados
 if st.checkbox("📋 Mostrar datos filtrados", key="show_data"):
     st.dataframe(df_filtrado, use_container_width=True)
+
+# Opción para descargar datos
+if st.button("💾 Descargar datos filtrados"):
+    csv = df_filtrado.to_csv(index=False).encode('utf-8')
+    st.download_button(
+        label="Descargar como CSV",
+        data=csv,
+        file_name="datos_filtrados.csv",
+        mime="text/csv"
+    )
