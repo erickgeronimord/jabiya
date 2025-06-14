@@ -537,57 +537,102 @@ with tab4:
         st.error(f"Error al generar análisis horario: {str(e)}")
 
 # -----------------------------------------
-# PESTAÑA 5: GEOREFERENCIACIÓN
+# PESTAÑA 5: GEOREFERENCIACIÓN (VERSIÓN FUNCIONAL)
 # -----------------------------------------
 with tab5:
     st.title("🌍 Análisis Geográfico")
     
     # Verificar si existen columnas de geolocalización
-    if all(col in df_filtrado.columns for col in ['Order Lines/Customer/Geo Latitude', 'Order Lines/Customer/Geo Longitude']):
+    geo_cols = ['Order Lines/Customer/Geo Latitude', 'Order Lines/Customer/Geo Longitude']
+    
+    if all(col in df_filtrado.columns for col in geo_cols):
         # Mapa de calor geográfico
         st.header("🗺️ Mapa de Calor de Clientes")
         
         try:
+            # Preparar datos geográficos
             geo_data = df_filtrado[
                 ['Order Lines/Customer/Company Name', 
-                 'Order Lines/Customer/Geo Latitude', 
-                 'Order Lines/Customer/Geo Longitude',
+                 geo_cols[0], 
+                 geo_cols[1],
                  'Order Lines/Untaxed Invoiced Amount']
             ].dropna()
             
             if not geo_data.empty:
                 geo_data = geo_data.rename(columns={
-                    'Order Lines/Customer/Geo Latitude': 'lat',
-                    'Order Lines/Customer/Geo Longitude': 'lon',
+                    geo_cols[0]: 'lat',
+                    geo_cols[1]: 'lon',
                     'Order Lines/Customer/Company Name': 'Cliente',
                     'Order Lines/Untaxed Invoiced Amount': 'Ventas'
                 })
                 
-                fig = px.density_mapbox(
+                # Crear figura con un estilo de mapa que no requiere token
+                fig = px.scatter_mapbox(
+                    geo_data,
+                    lat='lat',
+                    lon='lon',
+                    size='Ventas',
+                    color='Ventas',
+                    hover_name='Cliente',
+                    hover_data=['Ventas'],
+                    zoom=5,
+                    height=600,
+                    title='Distribución Geográfica de Clientes'
+                )
+                
+                # Usar un estilo de mapa de acceso abierto
+                fig.update_layout(
+                    mapbox_style="open-street-map",
+                    margin={"r":0,"t":40,"l":0,"b":0}
+                )
+                
+                st.plotly_chart(fig, use_container_width=True)
+                
+                # Opción alternativa con densidad
+                st.header("🔍 Mapa de Densidad")
+                fig_density = px.density_mapbox(
                     geo_data,
                     lat='lat',
                     lon='lon',
                     z='Ventas',
-                    radius=10,
+                    radius=20,
                     center=dict(lat=geo_data['lat'].mean(), lon=geo_data['lon'].mean()),
-                    zoom=10,
-                    mapbox_style="stamen-terrain",
+                    zoom=5,
+                    mapbox_style="open-street-map",
+                    height=600,
                     title='Concentración Geográfica de Ventas'
                 )
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig_density, use_container_width=True)
+                
             else:
-                st.warning("No hay datos geográficos disponibles para los filtros seleccionados")
+                st.warning("No hay datos geográficos válidos para los filtros seleccionados")
+                
         except Exception as e:
             st.error(f"Error al generar mapa geográfico: {str(e)}")
+            st.info("""
+            Consejos para solucionar problemas:
+            1. Verifica que las columnas de latitud y longitud contengan valores válidos
+            2. Asegúrate que los valores de latitud estén entre -90 y 90
+            3. Asegúrate que los valores de longitud estén entre -180 y 180
+            """)
+            
     else:
-        st.warning("No se encontraron datos de coordenadas geográficas en el dataset")
+        st.warning("""
+        No se encontraron datos de coordenadas geográficas en el dataset. 
+        Se requieren columnas llamadas:
+        - 'Order Lines/Customer/Geo Latitude' 
+        - 'Order Lines/Customer/Geo Longitude'
+        """)
+        
+        # Mostrar columnas disponibles para diagnóstico
+        st.write("Columnas disponibles en los datos:", df_filtrado.columns.tolist())
 
 # ==================================================
 # PIE DE PÁGINA Y OPCIONES ADICIONALES
 # ==================================================
 
 st.markdown("---")
-st.caption(f"Última actualización: {datetime.now().strftime('%d/%m/%Y %H:%M')} | Dashboard desarrollado con Streamlit")
+st.caption(f"Última actualización: {datetime.now().strftime('%d/%m/%Y %H:%M')} | Dashboard para cruzar los clientes de jabiya con el centro de SDQ")
 
 # Opción para mostrar datos filtrados
 if st.checkbox("📋 Mostrar datos filtrados", key="show_data"):
