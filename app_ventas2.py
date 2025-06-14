@@ -575,7 +575,7 @@ with tab5:
                     color='Ventas',
                     hover_name='Cliente',
                     hover_data=['Ventas'],
-                    zoom=5,
+                    zoom=11,
                     height=600,
                     title='Distribución Geográfica de Clientes'
                 )
@@ -597,7 +597,7 @@ with tab5:
                     z='Ventas',
                     radius=20,
                     center=dict(lat=geo_data['lat'].mean(), lon=geo_data['lon'].mean()),
-                    zoom=5,
+                    zoom=11,
                     mapbox_style="open-street-map",
                     height=600,
                     title='Concentración Geográfica de Ventas'
