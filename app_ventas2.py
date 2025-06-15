@@ -446,21 +446,12 @@ with tab3:
     st.title("📦 Análisis de Productos")
         
     # Subtítulo y descripción
-    st.subheader("Patrones y tendencias a lo largo del tiempo")
-    st.markdown("""
-    Este tablero muestra y analiza cómo varían las ventas::
-    - Por día de la semana y hora del día (para optimizar horarios).
-    - En diferentes frecuencias: diaria, semanal o mensual
-    - Identifica picos y valles estacionales en el negocio.
-    """)
-        
-    # Subtítulo y descripción
     st.subheader("Desempeño y relaciones entre productos")
     st.markdown("""
     En esta sección encontraremos:
-    *- Productos estrella:* Los más vendidos en unidades y valor económico.
-    *- Asociaciones:* Qué productos se compran juntos frecuentemente (para paquetes y promociones).
-    *- Distribución:* Participación porcentual de cada producto en las ventas totales.
+    - Productos estrella: Los más vendidos en unidades y valor económico.
+    - Asociaciones: Qué productos se compran juntos frecuentemente (para paquetes y promociones).
+    - Distribución: Participación porcentual de cada producto en las ventas totales.
        """)
     
     # Asociación de Productos
@@ -512,15 +503,6 @@ with tab3:
 # -----------------------------------------
 with tab4:
     st.title("🔄 Evolución Temporal")
-            
-    # Subtítulo y descripción
-    st.subheader("Patrones y tendencias a lo largo del tiempo")
-    st.markdown("""
-    Este tablero muestra y analiza cómo varían las ventas::
-    - Por día de la semana y hora del día (para optimizar horarios).
-    - En diferentes frecuencias: diaria, semanal o mensual
-    - Identifica picos y valles estacionales en el negocio.
-    """)
         
     # Subtítulo y descripción
     st.subheader("Análisis de métricas clave y tendencias")
@@ -529,7 +511,6 @@ with tab4:
     - Total de ventas y clientes únicos
     - Evolución mensual de ingresos
     - Productos más vendidos por volumen y valor
-    *Los datos nos ayudarán a identificar patrones generales y puntos destacados del período seleccionado.*
     """)
     
     # Selector de frecuencia
