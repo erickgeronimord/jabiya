@@ -453,43 +453,129 @@ with tab3:
     - Asociaciones: Qué productos se compran juntos frecuentemente (para paquetes y promociones).
     - Distribución: Participación porcentual de cada producto en las ventas totales.
        """)
+        # --- Nueva sección de filtros para asociación ---
+    st.header("🔍 Filtros para Asociación de Productos")
+    col1, col2 = st.columns(2)
     
-    # Asociación de Productos
+    with col1:
+        # Filtro por producto específico
+        todos_productos = ["Todos"] + sorted(df_filtrado['Order Lines/Product'].unique().tolist())
+        producto_seleccionado = st.selectbox(
+            "Seleccionar producto para análisis:",
+            options=todos_productos,
+            index=0
+        )
+    
+    with col2:
+        # Ajuste de parámetros
+        min_support = st.slider(
+            "Soporte mínimo (0-1):",
+            min_value=0.01,
+            max_value=0.5,
+            value=0.05,
+            step=0.01,
+            help="Frecuencia mínima con la que aparece el conjunto de productos"
+        )
+    
+    # --- Análisis de Asociación Mejorado ---
     st.header("🛒 Productos Comprados Juntos")
+    
     try:
-        transacciones = df_filtrado.groupby(['Order Lines/Invoice Lines/Number', 'Order Lines/Product'])['Order Lines/Product'].count().unstack().fillna(0)
+        # Preparar datos de transacciones
+        transacciones = df_filtrado.groupby(
+            ['Order Lines/Invoice Lines/Number', 'Order Lines/Product']
+        )['Order Lines/Product'].count().unstack().fillna(0)
         transacciones = transacciones.applymap(lambda x: 1 if x > 0 else 0)
         
-        reglas = apriori(transacciones, min_support=0.05, use_colnames=True, max_len=2)
-        reglas = association_rules(reglas, metric="lift", min_threshold=1)
+        # Filtrar por producto si se seleccionó uno específico
+        if producto_seleccionado != "Todos":
+            transacciones = transacciones[transacciones[producto_seleccionado] == 1]
+            st.info(f"Mostrando asociaciones para el producto: {producto_seleccionado}")
         
-        col1, col2 = st.columns(2)
-        with col1:
-            st.subheader("Top 5 Reglas de Asociación")
-            st.dataframe(reglas.sort_values('lift', ascending=False).head(5))
+        # Calcular reglas de asociación
+        itemsets = apriori(transacciones, min_support=min_support, use_colnames=True, max_len=3)
         
-        with col2:
-            st.subheader("Red de Relaciones")
-            fig_network = plt.figure(figsize=(10,8))
-            G = nx.Graph()
+        if not itemsets.empty:
+            reglas = association_rules(itemsets, metric="lift", min_threshold=1)
             
-            for _, row in reglas.sort_values('lift', ascending=False).head(8).iterrows():
-                antecedentes = ', '.join(list(row['antecedents']))
-                consecuentes = ', '.join(list(row['consequents']))
-                G.add_edge(antecedentes, consecuentes, weight=row['lift'])
+            # Convertir frozenset a strings legibles
+            reglas['antecedents'] = reglas['antecedents'].apply(lambda x: ', '.join(list(x)))
+            reglas['consequents'] = reglas['consequents'].apply(lambda x: ', '.join(list(x)))
             
-            pos = nx.spring_layout(G)
-            nx.draw(G, pos, with_labels=True, node_size=2500, node_color="skyblue", 
-                   font_size=10, width=[d['weight']*0.5 for (u,v,d) in G.edges(data=True)])
-            st.pyplot(fig_network)
+            # Ordenar por confianza y lift
+            reglas = reglas.sort_values(['confidence', 'lift'], ascending=[False, False])
+            
+            # Mostrar resultados
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.subheader(f"Top 10 Reglas (Soporte ≥ {min_support})")
+                st.dataframe(
+                    reglas.head(10)[['antecedents', 'consequents', 'support', 'confidence', 'lift']]
+                    .rename(columns={
+                        'antecedents': 'Productos Base',
+                        'consequents': 'Productos Asociados',
+                        'support': 'Soporte',
+                        'confidence': 'Confianza',
+                        'lift': 'Lift'
+                    }),
+                    height=400
+                )
+            
+            with col2:
+                st.subheader("Red de Relaciones")
+                if len(reglas) > 0:
+                    # Crear grafo de relaciones
+                    G = nx.Graph()
+                    
+                    for _, row in reglas.head(15).iterrows():
+                        G.add_edge(row['antecedents'], row['consequents'], 
+                                 weight=row['lift'], confidence=row['confidence'])
+                    
+                    # Dibujar el grafo
+                    plt.figure(figsize=(10, 8))
+                    pos = nx.spring_layout(G, k=0.5)
+                    
+                    # Tamaño de nodos basado en grado
+                    node_sizes = [300 + 100 * G.degree(node) for node in G.nodes()]
+                    
+                    # Dibujar nodos y aristas
+                    nx.draw_networkx_nodes(G, pos, node_size=node_sizes, node_color='lightblue')
+                    nx.draw_networkx_edges(
+                        G, pos, width=[d['weight']*0.5 for (_, _, d) in G.edges(data=True)],
+                        edge_color='gray'
+                    )
+                    nx.draw_networkx_labels(G, pos, font_size=10)
+                    
+                    # Leyenda personalizada
+                    edge_labels = {(u, v): f"Lift: {d['weight']:.2f}" 
+                                 for (u, v, d) in G.edges(data=True)}
+                    nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, font_size=8)
+                    
+                    plt.title("Relaciones entre Productos (Tamaño → Popularidad, Grosor → Lift)")
+                    plt.axis('off')
+                    st.pyplot(plt)
+                else:
+                    st.warning("No hay suficientes relaciones para mostrar el gráfico")
+        
+        else:
+            st.warning("No se encontraron conjuntos de productos frecuentes con los parámetros actuales")
+            
     except Exception as e:
-        st.warning(f"No se pudo generar el análisis de asociación: {str(e)}")
+        st.error(f"Error en el análisis de asociación: {str(e)}")
+        st.info("""
+        Recomendaciones:
+        1. Intenta reducir el soporte mínimo
+        2. Verifica que hay suficientes transacciones
+        3. Revisa que los nombres de productos no contengan caracteres especiales
+        """)
     
-    # Distribución de Ventas por Producto
-    st.header("📊 Distribución de Ventas")
+    # --- Resto de la pestaña 3 (Distribución de Ventas) ---
+    st.header("📊 Distribución de Ventas por Producto")
     try:
         fig_prod = px.treemap(
-            df_filtrado.groupby('Order Lines/Product')['Order Lines/Untaxed Invoiced Amount'].sum().reset_index(),
+            df_filtrado.groupby('Order Lines/Product')['Order Lines/Untaxed Invoiced Amount']
+            .sum().reset_index(),
             path=['Order Lines/Product'],
             values='Order Lines/Untaxed Invoiced Amount',
             title='Participación de cada Producto en Ventas Totales'
