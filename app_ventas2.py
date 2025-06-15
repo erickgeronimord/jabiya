@@ -583,9 +583,9 @@ with tab5:
     st.subheader("SDistribución geográfica de clientes y ventas")
     st.markdown("""
    Visualizamo en mapas interactivos::
-    *- Concentración* de clientes por zonas geográficas.
-    *- Ventas por ubicación* (tamaño de puntos según monto).
-    *- Rutas de distribución* potenciales basadas en clusters.
+    - Concentración de clientes por zonas geográficas.
+    - "Ventas por ubicación" (tamaño de puntos según monto).
+    - Rutas de distribución potenciales basadas en clusters.
     """)
     
     # Verificar si existen columnas de geolocalización
