@@ -505,12 +505,12 @@ with tab4:
     st.title("🔄 Evolución Temporal")
         
     # Subtítulo y descripción
-    st.subheader("Análisis de métricas clave y tendencias")
+    st.subheader("Patrones y tendencias a lo largo del tiempo")
     st.markdown("""
-    Este tablero muestra un panorama completo del desempeño comercial, incluyendo:
-    - Total de ventas y clientes únicos
-    - Evolución mensual de ingresos
-    - Productos más vendidos por volumen y valor
+    Este tablero analiza cómo varían las ventas:
+    - Por día de la semana y hora del día (para optimizar horarios)
+    - En diferentes frecuencias: diaria, semanal o mensual
+    - Identifica picos y valles estacionales en el negocio
     """)
     
     # Selector de frecuencia
@@ -584,7 +584,7 @@ with tab5:
     st.markdown("""
    Visualizamo en mapas interactivos::
     - Concentración de clientes por zonas geográficas.
-    - "Ventas por ubicación" (tamaño de puntos según monto).
+    - Ventas por ubicación (tamaño de puntos según monto).
     - Rutas de distribución potenciales basadas en clusters.
     """)
     
