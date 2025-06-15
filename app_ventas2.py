@@ -272,7 +272,7 @@ with tab1:
     - Total de ventas y clientes únicos
     - Evolución mensual de ingresos
     - Productos más vendidos por volumen y valor
-    *Los datos te ayudarán a identificar patrones generales y puntos destacados del período seleccionado.*
+    *Los datos nos ayudarán a identificar patrones generales y puntos destacados del período seleccionado.*
     """)
     
     # Calcular RFM de forma segura
@@ -362,6 +362,15 @@ with tab1:
 # -----------------------------------------
 with tab2:
     st.title("👥 Análisis de Comportamiento de Clientes")
+        
+    # Subtítulo y descripción
+    st.subheader("Segmentación RFM y análisis de retención")
+    st.markdown("""
+   Aquí analizamos a los clientes mediante:
+    *- Modelo RFM:* Clasificación por Recencia (última compra), Frecuencia (visitas) y Valor Monetario (gasto total).
+    *- Análisis de Cohortes:* Mide cómo se mantienen los clientes en el tiempo desde su primera compra.
+    *- Clientes Top:* Identifica quiénes generan mayor valor para al negocio.
+    """)
     
     # Mostrar segmentación RFM
     if rfm is not None and not rfm.empty:
@@ -435,6 +444,24 @@ with tab2:
 # -----------------------------------------
 with tab3:
     st.title("📦 Análisis de Productos")
+        
+    # Subtítulo y descripción
+    st.subheader("Patrones y tendencias a lo largo del tiempo")
+    st.markdown("""
+    Este tablero muestra y analiza cómo varían las ventas::
+    - Por día de la semana y hora del día (para optimizar horarios).
+    - En diferentes frecuencias: diaria, semanal o mensual
+    - Identifica picos y valles estacionales en el negocio.
+    """)
+        
+    # Subtítulo y descripción
+    st.subheader("Desempeño y relaciones entre productos")
+    st.markdown("""
+    En esta sección encontraremos:
+    *- Productos estrella:* Los más vendidos en unidades y valor económico.
+    *- Asociaciones:* Qué productos se compran juntos frecuentemente (para paquetes y promociones).
+    *- Distribución:* Participación porcentual de cada producto en las ventas totales.
+       """)
     
     # Asociación de Productos
     st.header("🛒 Productos Comprados Juntos")
@@ -485,6 +512,25 @@ with tab3:
 # -----------------------------------------
 with tab4:
     st.title("🔄 Evolución Temporal")
+            
+    # Subtítulo y descripción
+    st.subheader("Patrones y tendencias a lo largo del tiempo")
+    st.markdown("""
+    Este tablero muestra y analiza cómo varían las ventas::
+    - Por día de la semana y hora del día (para optimizar horarios).
+    - En diferentes frecuencias: diaria, semanal o mensual
+    - Identifica picos y valles estacionales en el negocio.
+    """)
+        
+    # Subtítulo y descripción
+    st.subheader("Análisis de métricas clave y tendencias")
+    st.markdown("""
+    Este tablero muestra un panorama completo del desempeño comercial, incluyendo:
+    - Total de ventas y clientes únicos
+    - Evolución mensual de ingresos
+    - Productos más vendidos por volumen y valor
+    *Los datos nos ayudarán a identificar patrones generales y puntos destacados del período seleccionado.*
+    """)
     
     # Selector de frecuencia
     freq = st.radio(
@@ -551,6 +597,15 @@ with tab4:
 # -----------------------------------------
 with tab5:
     st.title("🌍 Análisis Geográfico")
+            
+    # Subtítulo y descripción
+    st.subheader("SDistribución geográfica de clientes y ventas")
+    st.markdown("""
+   Visualizamo en mapas interactivos::
+    *- Concentración* de clientes por zonas geográficas.
+    *- Ventas por ubicación* (tamaño de puntos según monto).
+    *- Rutas de distribución* potenciales basadas en clusters.
+    """)
     
     # Verificar si existen columnas de geolocalización
     geo_cols = ['Order Lines/Customer/Geo Latitude', 'Order Lines/Customer/Geo Longitude']
