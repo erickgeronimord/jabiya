@@ -362,15 +362,15 @@ with tab1:
 # -----------------------------------------
 with tab2:
     st.title("👥 Análisis de Comportamiento de Clientes")
-        
+    
     # Subtítulo y descripción
     st.subheader("Segmentación RFM y análisis de retención")
     st.markdown("""
-   Aquí analizamos a los clientes mediante:
-    *- Modelo RFM:* Clasificación por Recencia (última compra), Frecuencia (visitas) y Valor Monetario (gasto total).
-    *- Análisis de Cohortes:* Mide cómo se mantienen los clientes en el tiempo desde su primera compra.
-    *- Clientes Top:* Identifica quiénes generan mayor valor para al negocio.
-    """)
+    Aquí analizamos a los clientes mediante:
+    - Modelo RFM: Clasificación por Recencia (última compra), Frecuencia (visitas) y Valor Monetario (gasto total).
+    - Análisis de Cohortes: Mide cómo se mantienen los clientes en el tiempo desde su primera compra.
+    - Clientes Top: Identifica quiénes generan mayor valor para tu negocio
+       """)
     
     # Mostrar segmentación RFM
     if rfm is not None and not rfm.empty:
